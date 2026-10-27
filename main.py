@@ -1,9 +1,11 @@
-import base64, json, os, sqlite3, time, uuid
+import base64, io, json, os, sqlite3, time, uuid
+from datetime import datetime
 from pathlib import Path
 import cv2, numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from fpdf import FPDF
 
 BASE = Path(__file__).parent
 # Vercel's filesystem is read-only except /tmp, and data there doesn't persist
@@ -169,6 +171,45 @@ def store(res, filename, batch, raw):
     res.update(id=aid, batch=batch, filename=filename)
     return res
 
+def build_report_pdf(res):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "PhyvoSense CordyScan Report", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 7, f"Sample: {res.get('batch') or res.get('filename') or ''}", new_x="LMARGIN", new_y="NEXT")
+    if res.get("created"):
+        pdf.cell(0, 7, f"Analyzed: {datetime.fromtimestamp(res['created']).strftime('%Y-%m-%d %H:%M')}",
+                  new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+    for w in res.get("warnings", []):
+        pdf.set_text_color(168, 90, 0)
+        pdf.multi_cell(0, 6, f"Warning: {w}")
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(2)
+    ann_bytes = base64.b64decode(res["annotated"])
+    iw, ih = cv2.imdecode(np.frombuffer(ann_bytes, np.uint8), cv2.IMREAD_COLOR).shape[1::-1]
+    target_h = 100.0
+    pdf.image(io.BytesIO(ann_bytes), h=target_h, w=target_h * iw / ih)
+    pdf.ln(4)
+    cal = res["calibration"]
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "Calibration", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 6, f"Rf target {res['rf_target']}  |  R² = {cal['r2']}  |  standards = {cal['n']}",
+              new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "Lanes", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+    for l in res["lanes"]:
+        if l["type"] == "standard":
+            line = f"Lane {l['lane']} (standard): known {l['known_ug']} µg -> est {l.get('est_ug', 'n/a')} µg"
+        else:
+            line = f"Lane {l['lane']} (sample): {l.get('status', '')}, est {l.get('est_ug', 'n/a')} µg"
+        pdf.cell(0, 6, line, new_x="LMARGIN", new_y="NEXT")
+    return bytes(pdf.output())
+
 # ---------- API ----------
 app = FastAPI(title="PhyvoSense CordyScan MVP")
 
@@ -211,5 +252,12 @@ def get_analysis(aid: str):
         raise HTTPException(404, "Analysis not found.")
     res = json.loads(r["result"]); res.update(id=aid, batch=r["batch"], filename=r["filename"], created=r["created"])
     return res
+
+@app.get("/api/report/{aid}")
+def report(aid: str):
+    res = get_analysis(aid)
+    pdf_bytes = build_report_pdf(res)
+    return Response(pdf_bytes, media_type="application/pdf",
+                     headers={"Content-Disposition": f'attachment; filename="cordyscan_{aid}.pdf"'})
 
 app.mount("/", StaticFiles(directory=BASE / "static", html=True), name="static")

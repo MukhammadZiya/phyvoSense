@@ -17,8 +17,8 @@ label{display:block;font-size:14px;font-weight:600;margin:12px 0 4px}
 input[type=text],input[type=number]{width:100%;padding:8px;border:1px solid var(--line);border-radius:4px;font:inherit}
 input:focus,button:focus-visible,summary:focus-visible{outline:3px solid var(--uv);outline-offset:1px}
 small{color:var(--mut);display:block;margin-top:3px}
-button{font:inherit;font-weight:600;padding:10px 14px;border-radius:4px;border:1px solid var(--ink);cursor:pointer;background:var(--ink);color:#fff;width:100%;margin-top:14px}
-button.alt{background:#fff;color:var(--ink)}
+button,a.btn{font:inherit;font-weight:600;padding:10px 14px;border-radius:4px;border:1px solid var(--ink);cursor:pointer;background:var(--ink);color:#fff;width:100%;margin-top:14px;box-sizing:border-box;text-align:center;text-decoration:none;display:block}
+button.alt,a.btn.alt{background:#fff;color:var(--ink)}
 button:disabled{opacity:.5;cursor:wait}
 details{margin-top:12px}summary{cursor:pointer;font-weight:600;font-size:14px}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -91,7 +91,7 @@ function render(r){
   r.lanes.map(l=>`<tr><td>${l.lane}</td><td>${l.type}</td><td>${l.area}</td><td>${l.known_ug??""}</td><td>${l.est_ug??""}</td><td>${esc(l.status||(l.detected?"detected":"faint"))}</td></tr>`).join("")+"</table>";
  h+=`<p><b>Calibration</b> from ${c.n} standards: area = ${c.slope.toFixed(2)} × µg + ${c.intercept.toFixed(2)}, R² = ${c.r2}</p>`;
  h+='<div class="charts">'+r.profiles.signal.map((s,i)=>`<div>${chart(r.profiles.rf,s,r.rf_target,r.tol,max)}<p>Lane ${i+1}: signal along the plate, green band is the Rf window</p></div>`).join("")+"</div>";
- h+=`<button class="alt noprint" onclick="window.print()">Save report as PDF</button>`;
+ h+=`<a class="btn alt noprint" href="/api/report/${r.id}" download="cordyscan_${r.id}.pdf">Download report (PDF)</a>`;
  $("out").innerHTML=h;
 }
 async function loadHist(){const d=await call("/api/history").catch(()=>[]);
