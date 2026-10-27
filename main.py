@@ -1,4 +1,4 @@
-import base64, json, sqlite3, time, uuid
+import base64, json, os, sqlite3, time, uuid
 from pathlib import Path
 import cv2, numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -6,9 +6,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 BASE = Path(__file__).parent
-UPLOADS = BASE / "data" / "uploads"
+# Vercel's filesystem is read-only except /tmp, and data there doesn't persist
+# between invocations. Locally this keeps using the project's own data/ folder.
+DATA_DIR = Path("/tmp") if os.environ.get("VERCEL") else BASE / "data"
+UPLOADS = DATA_DIR / "uploads"
 UPLOADS.mkdir(parents=True, exist_ok=True)
-DB = BASE / "data" / "phyvosense.db"
+DB = DATA_DIR / "phyvosense.db"
 
 def db():
     c = sqlite3.connect(DB)
